@@ -1344,7 +1344,7 @@ jobs:
           cd kernel_workspace/kernel_platform/common
           if [[ "${CPU}" == sm* ]]; then
             echo "修复启用IPv6 NAT后可能出现的设备误报…"
-            patch -p1 -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch"
+            patch -p1 -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" || true
           else
             echo "你的设备不支持 IPv6 NAT，跳过此步骤。"
           fi
