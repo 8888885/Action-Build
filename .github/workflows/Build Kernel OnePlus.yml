@@ -803,19 +803,13 @@ jobs:
           ESC_VERSION_FULL=$(printf '%s' "$VERSION_FULL" | sed 's/[&|\\/]/\\&/g')
           ESC_KSU_VERSION_TAG=$(printf '%s' "$KSU_VERSION_TAG" | sed 's/[&|\\/]/\\&/g')
 
+          # Inject KSU_VERSION_FULL into Makefile
           if grep -q '^KSU_VERSION_FULL := ' kernel/Makefile; then
             sed -i "s|^KSU_VERSION_FULL := .*|KSU_VERSION_FULL := $ESC_VERSION_FULL|" kernel/Makefile
+          elif grep -q '^REPO_OWNER := ' kernel/Makefile; then
+            sed -i "/^REPO_OWNER := /a\\\nKSU_VERSION_FULL := $ESC_VERSION_FULL" kernel/Makefile
           else
-            awk -v full="$VERSION_FULL" '
-              /^REPO_OWNER :=/ && !done {
-                print
-                print ""
-                print "KSU_VERSION_FULL := " full
-                done=1
-                next
-              }
-              { print }
-            ' kernel/Makefile > kernel/Makefile.tmp && mv kernel/Makefile.tmp kernel/Makefile
+            echo "KSU_VERSION_FULL := $ESC_VERSION_FULL" >> kernel/Makefile
           fi
 
           if grep -q '^KSU_VERSION_API := ' kernel/Makefile; then
