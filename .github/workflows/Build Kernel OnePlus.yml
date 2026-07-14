@@ -823,6 +823,71 @@ jobs:
           grep -nE '^(REPO_OWNER|REPO_NAME|REPO_BRANCH|KSU_VERSION_API|KSU_VERSION_FULL|VERSION_TAG|GIT_BIN|CURL_BIN)' kernel/Makefile
           echo "::endgroup::"
 
+
+      - name: Fix KPM for Kernel 6.12
+        if: ${{ env.KERNEL_VERSION == '6.12' && github.event.inputs.KPM == 'KPM' }}
+        run: |
+          cd kernel_workspace/kernel_platform/common/drivers/kernelsu
+
+          echo "=== Fixing KPM for Kernel 6.12 ==="
+
+          # Fix 1: super_access.c - remove cb_mutex for kernel 6.1+
+          if grep -q 'cb_mutex' kernel/kpm/super_access.c; then
+            echo "Patching super_access.c: removing cb_mutex for 6.12..."
+            sed -i '/DEFINE_MEMBER(netlink_kernel_cfg, cb_mutex)/d' kernel/kpm/super_access.c
+            echo "Fixed cb_mutex"
+          fi
+
+          # Fix 2: lsm_hook.c - fix security_add_hooks signature for 6.1+
+          # In kernel 6.8+, security_add_hooks takes (struct lsm_id *) instead of (const char *)
+          if grep -q 'security_add_hooks.*"ksu"' kernel/hook/lsm_hook.c; then
+            echo "Patching lsm_hook.c: fixing security_add_hooks for 6.8+..."
+            # Replace the line with version-aware code
+            cat > /tmp/lsm_fix.c << 'LSMEOF'
+            // Kernel 6.8+ uses struct lsm_id instead of const char *
+            #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+            static struct lsm_id ksu_lsm_id = {
+                .name = "ksu",
+                .id = LSM_ID_EXT,
+            };
+            security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), &ksu_lsm_id);
+            #else
+            security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
+            #endif
+LSMEOF
+            # Use sed to replace the security_add_hooks line
+            python3 -c "
+import re
+with open('kernel/hook/lsm_hook.c', 'r') as f:
+    content = f.read()
+
+old = 'security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");'
+new = '''#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+            static struct lsm_id ksu_lsm_id = {
+                .name = "ksu",
+                .id = LSM_ID_EXT,
+            };
+            security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), &ksu_lsm_id);
+        #else
+            security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
+        #endif'''
+
+content = content.replace(old, new)
+
+with open('kernel/hook/lsm_hook.c', 'w') as f:
+    f.write(content)
+print('Fixed lsm_hook.c')
+"
+          fi
+
+          # Fix 3: Add include for lsm_id if needed
+          if grep -q 'LSM_ID_EXT' kernel/hook/lsm_hook.c && ! grep -q 'lsm_hooks.h' kernel/hook/lsm_hook.c; then
+            sed -i '1i#include <linux/lsm_hooks.h>' kernel/hook/lsm_hook.c
+            echo "Added lsm_hooks.h include"
+          fi
+
+          echo "=== KPM 6.12 fixes applied ==="
+
       - name: Apply Fake Patches
         if: ${{ github.event.inputs.SUSFS_META != '-1' }}
         run: |
@@ -1224,6 +1289,10 @@ jobs:
 
           # SukiSU Ultra配置
           set_config "CONFIG_KSU=y"
+          # For 6.12 kernel, disable KPM builtin (will use KPN instead)
+          if [ "${{ github.event.inputs.KPM }}" = "KPM" ]; then
+            set_config "CONFIG_KPM=y"
+          fi
 
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
