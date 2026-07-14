@@ -1,3 +1,4 @@
+# Force re-index for workflow_dispatch trigger
 name: Build All OnePlus Kernels
 on:
   workflow_dispatch:
