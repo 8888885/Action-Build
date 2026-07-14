@@ -829,35 +829,7 @@ jobs:
         run: |
           cd kernel_workspace/kernel_platform/common/drivers/kernelsu
           echo "=== Fixing KPM for Kernel 6.12 ==="
-          # Fix 1: super_access.c - remove cb_mutex for kernel 6.1+
-          if [ -f kernel/kpm/super_access.c ] && grep -q 'cb_mutex' kernel/kpm/super_access.c; then
-            echo "Patching super_access.c: removing cb_mutex for 6.12..."
-            sed -i '/DEFINE_MEMBER(netlink_kernel_cfg, cb_mutex)/d' kernel/kpm/super_access.c
-            echo "Fixed cb_mutex"
-          else
-            echo "Skipping super_access.c (cb_mutex not found or file missing)"
-          fi
-          # Fix 2: lsm_hook.c - fix security_add_hooks signature for 6.8+
-          if [ -f kernel/hook/lsm_hook.c ] && grep -q 'security_add_hooks.*"ksu"' kernel/hook/lsm_hook.c; then
-            echo "Patching lsm_hook.c: fixing security_add_hooks for 6.8+..."
-            # Comment out the old line
-            sed -i 's|security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");|// PATCHED: security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");|' kernel/hook/lsm_hook.c
-            # Add the new version-aware code before the commented line (using multiple sed commands)
-            sed -i '/PATCHED: security_add_hooks/i\    #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)' kernel/hook/lsm_hook.c
-            sed -i '/#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)/a\        static struct lsm_id ksu_lsm_id = { .name = "ksu", .id = LSM_ID_EXT };' kernel/hook/lsm_hook.c
-            sed -i '/static struct lsm_id ksu_lsm_id/a\        security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), \&ksu_lsm_id);' kernel/hook/lsm_hook.c
-            sed -i '/security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), \&ksu_lsm_id);/a\    #else' kernel/hook/lsm_hook.c
-            sed -i '/#else/a\        security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");' kernel/hook/lsm_hook.c
-            sed -i '/security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");/a\    #endif' kernel/hook/lsm_hook.c
-            echo "Fixed lsm_hook.c"
-          else
-            echo "Skipping lsm_hook.c (pattern not found or file missing)"
-          fi
-          # Fix 3: Add include for lsm_id if needed
-          if [ -f kernel/hook/lsm_hook.c ] && grep -q 'LSM_ID_EXT' kernel/hook/lsm_hook.c && ! grep -q 'lsm_hooks.h' kernel/hook/lsm_hook.c; then
-            sed -i '1i#include <linux/lsm_hooks.h>' kernel/hook/lsm_hook.c
-            echo "Added lsm_hooks.h include"
-          fi
+          python3 $GITHUB_WORKSPACE/scripts/fix_kpm_612.py
           echo "=== KPM 6.12 fixes applied ==="
 
       - name: Apply Fake Patches
