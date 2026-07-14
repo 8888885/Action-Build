@@ -854,38 +854,36 @@ jobs:
             #else
             security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
             #endif
-LSMEOF
+            LSMEOF
             # Use sed to replace the security_add_hooks line
             python3 -c "
-import re
-with open('kernel/hook/lsm_hook.c', 'r') as f:
-    content = f.read()
+            import re
+            with open('kernel/hook/lsm_hook.c', 'r') as f:
+            content = f.read()
 
-old = 'security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");'
-new = '''#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+            old = 'security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");'
+            new = '''#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
             static struct lsm_id ksu_lsm_id = {
                 .name = "ksu",
-                .id = LSM_ID_EXT,
+            .id = LSM_ID_EXT,
             };
             security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), &ksu_lsm_id);
-        #else
+            #else
             security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
-        #endif'''
+            #endif'''
 
-content = content.replace(old, new)
-
-with open('kernel/hook/lsm_hook.c', 'w') as f:
-    f.write(content)
-print('Fixed lsm_hook.c')
-"
+            content = content.replace(old, new)
+            with open('kernel/hook/lsm_hook.c', 'w') as f:
+                f.write(content)
+            print('Fixed lsm_hook.c')
+            "
+          "
           fi
-
           # Fix 3: Add include for lsm_id if needed
           if grep -q 'LSM_ID_EXT' kernel/hook/lsm_hook.c && ! grep -q 'lsm_hooks.h' kernel/hook/lsm_hook.c; then
             sed -i '1i#include <linux/lsm_hooks.h>' kernel/hook/lsm_hook.c
-            echo "Added lsm_hooks.h include"
+          echo "Added lsm_hooks.h include"
           fi
-
           echo "=== KPM 6.12 fixes applied ==="
 
       - name: Apply Fake Patches
